@@ -130,6 +130,21 @@
 `;
   document.head.appendChild(style);
 
+  window.MathJax = window.MathJax || {
+    tex: {
+      inlineMath: [["\\(", "\\)"]],
+      displayMath: [["\\[", "\\]"]]
+    }
+  };
+  const mathScript = document.createElement("script");
+  mathScript.src = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js";
+  mathScript.async = true;
+  const mathReady = new Promise(resolve => {
+    mathScript.onload = resolve;
+    mathScript.onerror = resolve;
+    document.head.appendChild(mathScript);
+  });
+
   // ---- Load Puter API ----
   const script = document.createElement("script");
   script.src = "https://js.puter.com/v2/";
@@ -170,13 +185,24 @@
     const btn = widget.querySelector(".send-btn");
     const thinking = widget.querySelector("#ai-thinking");
 
-    function add(text, cls) {
+    function format(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
+        .replace(/\n/g, "<br>");
+    }
+
+    function add(text, cls, label = "") {
       const d = document.createElement("div");
       d.className = "ai-msg " + cls;
-      d.innerHTML = text.replace(/\n/g, "<br>");
+      d.innerHTML = (label ? `<strong>${label}</strong> ` : "") + format(text);
       msgs.appendChild(d);
       setTimeout(() => d.classList.add("visible"), 10);
       msgs.scrollTop = msgs.scrollHeight;
+      mathReady.then(() => window.MathJax?.typesetPromise?.([d]).catch(() => {}));
     }
 
     async function ask(q) {
@@ -192,7 +218,19 @@
       if (!t) return;
 
       input.value = "";
-      add("<b>You:</b> " + t, "user");
+      add(t, "user", "You:");
+
+      const modelCommand = t.match(/^\/model(?:\s+([\s\S]*))?$/i);
+      if (modelCommand) {
+        const requestedModel = (modelCommand[1] || "").trim();
+        if (requestedModel) {
+          currentModel = requestedModel;
+          add(`Model changed to **${currentModel}**.`, "bot");
+        } else {
+          add(`Current model: **${currentModel}**. Use **/model model-name** to change it.`, "bot");
+        }
+        return;
+      }
 
       btn.disabled = true;
       thinking.style.display = "block";
@@ -200,7 +238,7 @@
       const r = await ask(t);
 
       thinking.style.display = "none";
-      add("<b>AI:</b> " + r, "bot");
+      add(r, "bot", "AI:");
 
       btn.disabled = false;
     }
@@ -228,6 +266,6 @@
       msgs.innerHTML = "";
     };
 
-    add(`<i>Using model: <b>${currentModel}</b></i>`, "bot");
+    add(`Using model: **${currentModel}**`, "bot");
   }
 })();
