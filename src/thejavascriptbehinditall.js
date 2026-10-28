@@ -130,20 +130,44 @@
 `;
   document.head.appendChild(style);
 
-  window.MathJax = window.MathJax || {
-    tex: {
-      inlineMath: [["\\(", "\\)"]],
-      displayMath: [["\\[", "\\]"]]
+  const katexSources = [
+    {
+      css: "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css",
+      katex: "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js",
+      autoRender: "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    },
+    {
+      css: "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css",
+      katex: "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js",
+      autoRender: "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/contrib/auto-render.min.js"
     }
-  };
-  const mathScript = document.createElement("script");
-  mathScript.src = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js";
-  mathScript.async = true;
-  const mathReady = new Promise(resolve => {
-    mathScript.onload = resolve;
-    mathScript.onerror = resolve;
-    document.head.appendChild(mathScript);
-  });
+  ];
+  const katexReady = (async () => {
+    for (const source of katexSources) {
+      const cssLoaded = await new Promise(resolve => {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = source.css;
+        link.onload = () => resolve(true);
+        link.onerror = () => resolve(false);
+        document.head.appendChild(link);
+      });
+      if (!cssLoaded) continue;
+
+      const loadScript = src => new Promise(resolve => {
+        const script = document.createElement("script");
+        script.src = src;
+        script.async = true;
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
+      });
+      const katexLoaded = window.katex || await loadScript(source.katex);
+      const autoRenderLoaded = window.renderMathInElement || await loadScript(source.autoRender);
+      if (katexLoaded && autoRenderLoaded && window.renderMathInElement) return true;
+    }
+    return false;
+  })();
 
   // ---- Load Puter API ----
   const script = document.createElement("script");
@@ -202,7 +226,17 @@
       msgs.appendChild(d);
       setTimeout(() => d.classList.add("visible"), 10);
       msgs.scrollTop = msgs.scrollHeight;
-      mathReady.then(() => window.MathJax?.typesetPromise?.([d]).catch(() => {}));
+      katexReady.then(ready => {
+        if (ready) {
+          window.renderMathInElement(d, {
+            delimiters: [
+              { left: "\\[", right: "\\]", display: true },
+              { left: "\\(", right: "\\)", display: false }
+            ],
+            throwOnError: false
+          });
+        }
+      }).catch(() => {});
     }
 
     async function ask(q) {
